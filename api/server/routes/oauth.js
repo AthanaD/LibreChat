@@ -1,11 +1,11 @@
 // file deepcode ignore NoRateLimitingForLogin: Rate limiting is handled by the `loginLimiter` middleware
-
-const passport = require('passport');
 const express = require('express');
-const router = express.Router();
+const passport = require('passport');
+const { loginLimiter, checkBan, checkDomainAllowed } = require('~/server/middleware');
 const { setAuthTokens } = require('~/server/services/AuthService');
-const { loginLimiter, checkBan } = require('~/server/middleware');
 const { logger } = require('~/config');
+
+const router = express.Router();
 
 const domains = {
   client: process.env.DOMAIN_CLIENT,
@@ -16,6 +16,7 @@ router.use(loginLimiter);
 
 const oauthHandler = async (req, res) => {
   try {
+    await checkDomainAllowed(req, res);
     await checkBan(req, res);
     if (req.banned) {
       return;
@@ -26,6 +27,12 @@ const oauthHandler = async (req, res) => {
     logger.error('Error in setting authentication tokens:', err);
   }
 };
+
+router.get('/error', (req, res) => {
+  // A single error message is pushed by passport when authentication fails.
+  logger.error('Error in OAuth authentication:', { message: req.session.messages.pop() });
+  res.redirect(`${domains.client}/login`);
+});
 
 /**
  * Google Routes
@@ -41,7 +48,7 @@ router.get(
 router.get(
   '/google/callback',
   passport.authenticate('google', {
-    failureRedirect: `${domains.client}/login`,
+    failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
     session: false,
     scope: ['openid', 'profile', 'email'],
@@ -61,7 +68,7 @@ router.get(
 router.get(
   '/facebook/callback',
   passport.authenticate('facebook', {
-    failureRedirect: `${domains.client}/login`,
+    failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
     session: false,
     scope: ['public_profile'],
@@ -80,7 +87,7 @@ router.get(
 router.get(
   '/openid/callback',
   passport.authenticate('openid', {
-    failureRedirect: `${domains.client}/login`,
+    failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
     session: false,
   }),
@@ -98,7 +105,7 @@ router.get(
 router.get(
   '/github/callback',
   passport.authenticate('github', {
-    failureRedirect: `${domains.client}/login`,
+    failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
     session: false,
     scope: ['user:email', 'read:user'],
@@ -116,7 +123,7 @@ router.get(
 router.get(
   '/discord/callback',
   passport.authenticate('discord', {
-    failureRedirect: `${domains.client}/login`,
+    failureRedirect: `${domains.client}/oauth/error`,
     failureMessage: true,
     session: false,
     scope: ['identify', 'email'],

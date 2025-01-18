@@ -26,6 +26,9 @@ const convoSchema = mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
     },
     ...conversationPreset,
+    agent_id: {
+      type: String,
+    },
     // for bingAI only
     bingConversationId: {
       type: String,
@@ -42,6 +45,14 @@ const convoSchema = mongoose.Schema(
     invocationId: {
       type: Number,
     },
+    tags: {
+      type: [String],
+      default: [],
+      meiliIndex: true,
+    },
+    files: {
+      type: [String],
+    },
   },
   { timestamps: true },
 );
@@ -56,6 +67,7 @@ if (process.env.MEILI_HOST && process.env.MEILI_MASTER_KEY) {
 }
 
 convoSchema.index({ createdAt: 1, updatedAt: 1 });
+convoSchema.index({ conversationId: 1, user: 1 }, { unique: true });
 
 const Conversation = mongoose.models.Conversation || mongoose.model('Conversation', convoSchema);
 

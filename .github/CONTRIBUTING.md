@@ -8,7 +8,7 @@ If the feature you would like to contribute has not already received prior appro
 
 Please note that a pull request involving a feature that has not been reviewed and approved by the project maintainers may be rejected. We appreciate your understanding and cooperation.
 
-If you would like to discuss the changes you wish to make, join our [Discord community](https://discord.gg/uDyZ5Tzhct), where you can engage with other contributors and seek guidance from the community.
+If you would like to discuss the changes you wish to make, join our [Discord community](https://discord.librechat.ai), where you can engage with other contributors and seek guidance from the community.
 
 ## Our Standards
 
@@ -126,6 +126,18 @@ Apply the following naming conventions to branches, labels, and other Git-relate
       
    - **Current Stance**: At present, this backend transition is of lower priority and might not be pursued.
 
+## 7. Module Import Conventions
+
+- `npm` packages first, 
+     - from shortest line (top) to longest (bottom)
+
+- Followed by typescript types (pertains to data-provider and client workspaces)
+     - longest line (top) to shortest (bottom)
+     - types from package come first
+
+- Lastly, local imports
+     - longest line (top) to shortest (bottom)
+     - imports with alias `~` treated the same as relative import with respect to line length
 
 ---
 

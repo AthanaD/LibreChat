@@ -12,13 +12,19 @@ module.exports = {
     'plugin:react-hooks/recommended',
     'plugin:jest/recommended',
     'prettier',
+    'plugin:jsx-a11y/recommended',
   ],
   ignorePatterns: [
     'client/dist/**/*',
     'client/public/**/*',
     'e2e/playwright-report/**/*',
+    'packages/mcp/types/**/*',
+    'packages/mcp/dist/**/*',
+    'packages/mcp/test_bundle/**/*',
+    'api/demo/**/*',
     'packages/data-provider/types/**/*',
     'packages/data-provider/dist/**/*',
+    'packages/data-provider/test_bundle/**/*',
     'data-node/**/*',
     'meili_data/**/*',
     'node_modules/**/*',
@@ -31,7 +37,7 @@ module.exports = {
       jsx: true,
     },
   },
-  plugins: ['react', 'react-hooks', '@typescript-eslint', 'import'],
+  plugins: ['react', 'react-hooks', '@typescript-eslint', 'import', 'jsx-a11y'],
   rules: {
     'react/react-in-jsx-scope': 'off',
     '@typescript-eslint/ban-ts-comment': ['error', { 'ts-ignore': 'allow' }],
@@ -64,6 +70,7 @@ module.exports = {
     'no-restricted-syntax': 'off',
     'react/prop-types': ['off'],
     'react/display-name': ['off'],
+    'no-nested-ternary': 'error',
     'no-unused-vars': ['error', { varsIgnorePattern: '^_' }],
     quotes: ['error', 'single'],
   },
@@ -117,6 +124,8 @@ module.exports = {
       ],
       rules: {
         '@typescript-eslint/no-explicit-any': 'error',
+        '@typescript-eslint/no-unnecessary-condition': 'warn',
+        '@typescript-eslint/strict-boolean-expressions': 'warn',
       },
     },
     {
@@ -132,9 +141,52 @@ module.exports = {
       ],
     },
     {
+      files: './api/demo/**/*.ts',
+      overrides: [
+        {
+          files: '**/*.ts',
+          parser: '@typescript-eslint/parser',
+          parserOptions: {
+            project: './packages/data-provider/tsconfig.json',
+          },
+        },
+      ],
+    },
+    {
+      files: './packages/mcp/**/*.ts',
+      overrides: [
+        {
+          files: '**/*.ts',
+          parser: '@typescript-eslint/parser',
+          parserOptions: {
+            project: './packages/mcp/tsconfig.json',
+          },
+        },
+      ],
+    },
+    {
+      files: './config/translations/**/*.ts',
+      parser: '@typescript-eslint/parser',
+      parserOptions: {
+        project: './config/translations/tsconfig.json',
+      },
+    },
+    {
       files: ['./packages/data-provider/specs/**/*.ts'],
       parserOptions: {
         project: './packages/data-provider/tsconfig.spec.json',
+      },
+    },
+    {
+      files: ['./api/demo/specs/**/*.ts'],
+      parserOptions: {
+        project: './packages/data-provider/tsconfig.spec.json',
+      },
+    },
+    {
+      files: ['./packages/mcp/specs/**/*.ts'],
+      parserOptions: {
+        project: './packages/mcp/tsconfig.spec.json',
       },
     },
   ],

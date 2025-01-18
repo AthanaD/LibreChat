@@ -1,18 +1,18 @@
-import {
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type {
   UseQueryOptions,
-  useQuery,
-  useMutation,
-  useQueryClient,
   UseMutationResult,
   QueryObserverResult,
 } from '@tanstack/react-query';
-import * as t from '../types';
-import * as s from '../schemas';
-import * as m from '../types/mutations';
-import { defaultOrderQuery } from '../config';
+import { initialModelsConfig } from '../config';
+import type { TStartupConfig } from '../config';
+import { defaultOrderQuery } from '../types/assistants';
 import * as dataService from '../data-service';
-import request from '../request';
+import * as m from '../types/mutations';
 import { QueryKeys } from '../keys';
+import request from '../request';
+import * as s from '../schemas';
+import * as t from '../types';
 
 export const useAbortRequestWithMessage = (): UseMutationResult<
   void,
@@ -50,6 +50,22 @@ export const useGetMessagesByConvoId = <TData = s.TMessage[]>(
   return useQuery<s.TMessage[], unknown, TData>(
     [QueryKeys.messages, id],
     () => dataService.getMessagesByConvoId(id),
+    {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+      ...config,
+    },
+  );
+};
+
+export const useGetSharedMessages = (
+  shareId: string,
+  config?: UseQueryOptions<t.TSharedMessagesResponse>,
+): QueryObserverResult<t.TSharedMessagesResponse> => {
+  return useQuery<t.TSharedMessagesResponse>(
+    [QueryKeys.sharedMessages, shareId],
+    () => dataService.getSharedMessages(shareId),
     {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
@@ -109,6 +125,20 @@ export const useUpdateMessageMutation = (
   });
 };
 
+export const useUpdateMessageContentMutation = (
+  conversationId: string,
+): UseMutationResult<unknown, unknown, t.TUpdateMessageContent, unknown> => {
+  const queryClient = useQueryClient();
+  return useMutation(
+    (payload: t.TUpdateMessageContent) => dataService.updateMessageContent(payload),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries([QueryKeys.messages, conversationId]);
+      },
+    },
+  );
+};
+
 export const useUpdateUserKeysMutation = (): UseMutationResult<
   t.TUser,
   unknown,
@@ -117,8 +147,8 @@ export const useUpdateUserKeysMutation = (): UseMutationResult<
 > => {
   const queryClient = useQueryClient();
   return useMutation((payload: t.TUpdateUserKeyRequest) => dataService.updateUserKey(payload), {
-    onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.name]);
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries([QueryKeys.name, variables.name]);
     },
   });
 };
@@ -136,9 +166,9 @@ export const useRevokeUserKeyMutation = (name: string): UseMutationResult<unknow
   const queryClient = useQueryClient();
   return useMutation(() => dataService.revokeUserKey(name), {
     onSuccess: () => {
-      queryClient.invalidateQueries([QueryKeys.name]);
-      if (name === s.EModelEndpoint.assistants) {
-        queryClient.invalidateQueries([QueryKeys.assistants, defaultOrderQuery]);
+      queryClient.invalidateQueries([QueryKeys.name, name]);
+      if (s.isAssistantsEndpoint(name)) {
+        queryClient.invalidateQueries([QueryKeys.assistants, name, defaultOrderQuery]);
         queryClient.invalidateQueries([QueryKeys.assistantDocs]);
         queryClient.invalidateQueries([QueryKeys.assistants]);
         queryClient.invalidateQueries([QueryKeys.assistant]);
@@ -154,7 +184,16 @@ export const useRevokeAllUserKeysMutation = (): UseMutationResult<unknown> => {
   return useMutation(() => dataService.revokeAllUserKeys(), {
     onSuccess: () => {
       queryClient.invalidateQueries([QueryKeys.name]);
-      queryClient.invalidateQueries([QueryKeys.assistants, defaultOrderQuery]);
+      queryClient.invalidateQueries([
+        QueryKeys.assistants,
+        s.EModelEndpoint.assistants,
+        defaultOrderQuery,
+      ]);
+      queryClient.invalidateQueries([
+        QueryKeys.assistants,
+        s.EModelEndpoint.azureAssistants,
+        defaultOrderQuery,
+      ]);
       queryClient.invalidateQueries([QueryKeys.assistantDocs]);
       queryClient.invalidateQueries([QueryKeys.assistants]);
       queryClient.invalidateQueries([QueryKeys.assistant]);
@@ -162,22 +201,6 @@ export const useRevokeAllUserKeysMutation = (): UseMutationResult<unknown> => {
       queryClient.invalidateQueries([QueryKeys.tools]);
     },
   });
-};
-
-export const useGetConversationsQuery = (
-  pageNumber: string,
-  config?: UseQueryOptions<t.TGetConversationsResponse>,
-): QueryObserverResult<t.TGetConversationsResponse> => {
-  return useQuery<t.TGetConversationsResponse>(
-    [QueryKeys.allConversations],
-    () => dataService.getConversations(pageNumber),
-    {
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      retry: 1,
-      ...config,
-    },
-  );
 };
 
 export const useGetSearchEnabledQuery = (
@@ -211,10 +234,11 @@ export const useGetModelsQuery = (
   config?: UseQueryOptions<t.TModelsConfig>,
 ): QueryObserverResult<t.TModelsConfig> => {
   return useQuery<t.TModelsConfig>([QueryKeys.models], () => dataService.getModels(), {
-    staleTime: Infinity,
+    initialData: initialModelsConfig,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchOnMount: false,
+    staleTime: Infinity,
     ...config,
   });
 };
@@ -278,41 +302,23 @@ export const useUpdateTokenCountMutation = (): UseMutationResult<
   });
 };
 
-export const useLoginUserMutation = (): UseMutationResult<
-  t.TLoginResponse,
-  unknown,
-  t.TLoginUser,
-  unknown
-> => {
-  const queryClient = useQueryClient();
-  return useMutation((payload: t.TLoginUser) => dataService.login(payload), {
-    onMutate: () => {
-      queryClient.removeQueries();
-      localStorage.removeItem('lastConversationSetup');
-      localStorage.removeItem('lastSelectedModel');
-      localStorage.removeItem('lastSelectedTools');
-      localStorage.removeItem('filesToDelete');
-      // localStorage.removeItem('lastAssistant');
-    },
-  });
-};
-
-export const useRegisterUserMutation = (): UseMutationResult<
-  unknown,
-  unknown,
-  t.TRegisterUser,
-  unknown
-> => {
+export const useRegisterUserMutation = (
+  options?: m.RegistrationOptions,
+): UseMutationResult<t.TError, unknown, t.TRegisterUser, unknown> => {
   const queryClient = useQueryClient();
   return useMutation((payload: t.TRegisterUser) => dataService.register(payload), {
-    onSuccess: () => {
+    ...options,
+    onSuccess: (...args) => {
       queryClient.invalidateQueries([QueryKeys.user]);
+      if (options?.onSuccess) {
+        options.onSuccess(...args);
+      }
     },
   });
 };
 
 export const useRefreshTokenMutation = (): UseMutationResult<
-  t.TRefreshTokenResponse,
+  t.TRefreshTokenResponse | undefined,
   unknown,
   unknown,
   unknown
@@ -367,40 +373,68 @@ export const useResetPasswordMutation = (): UseMutationResult<
   return useMutation((payload: t.TResetPassword) => dataService.resetPassword(payload));
 };
 
-export const useAvailablePluginsQuery = (): QueryObserverResult<s.TPlugin[]> => {
-  return useQuery<s.TPlugin[]>(
+export const useAvailablePluginsQuery = <TData = s.TPlugin[]>(
+  config?: UseQueryOptions<s.TPlugin[], unknown, TData>,
+): QueryObserverResult<TData> => {
+  return useQuery<s.TPlugin[], unknown, TData>(
     [QueryKeys.availablePlugins],
     () => dataService.getAvailablePlugins(),
     {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchOnMount: false,
+      ...config,
     },
   );
 };
 
-export const useUpdateUserPluginsMutation = (): UseMutationResult<
-  t.TUser,
-  unknown,
-  t.TUpdateUserPlugins,
-  unknown
-> => {
+export const useUpdateUserPluginsMutation = (
+  _options?: m.UpdatePluginAuthOptions,
+): UseMutationResult<t.TUser, unknown, t.TUpdateUserPlugins, unknown> => {
   const queryClient = useQueryClient();
+  const { onSuccess, ...options } = _options ?? {};
   return useMutation((payload: t.TUpdateUserPlugins) => dataService.updateUserPlugins(payload), {
-    onSuccess: () => {
+    ...options,
+    onSuccess: (...args) => {
       queryClient.invalidateQueries([QueryKeys.user]);
+      onSuccess?.(...args);
     },
   });
 };
 
-export const useGetStartupConfig = (): QueryObserverResult<t.TStartupConfig> => {
-  return useQuery<t.TStartupConfig>(
-    [QueryKeys.startupConfig],
-    () => dataService.getStartupConfig(),
+export const useGetStartupConfig = (
+  config?: UseQueryOptions<TStartupConfig>,
+): QueryObserverResult<TStartupConfig> => {
+  return useQuery<TStartupConfig>([QueryKeys.startupConfig], () => dataService.getStartupConfig(), {
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    ...config,
+  });
+};
+
+export const useGetCustomConfigSpeechQuery = (
+  config?: UseQueryOptions<t.TCustomConfigSpeechResponse>,
+): QueryObserverResult<t.TCustomConfigSpeechResponse> => {
+  return useQuery<t.TCustomConfigSpeechResponse>(
+    [QueryKeys.customConfigSpeech],
+    () => dataService.getCustomConfigSpeech(),
     {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       refetchOnMount: false,
+      ...config,
     },
   );
+};
+
+export const useGetBannerQuery = (
+  config?: UseQueryOptions<t.TBannerResponse>,
+): QueryObserverResult<t.TBannerResponse> => {
+  return useQuery<t.TBannerResponse>([QueryKeys.banner], () => dataService.getBanner(), {
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    ...config,
+  });
 };

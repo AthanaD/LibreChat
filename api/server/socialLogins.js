@@ -1,14 +1,17 @@
-const session = require('express-session');
-const RedisStore = require('connect-redis').default;
+const Redis = require('ioredis');
 const passport = require('passport');
+const session = require('express-session');
+const MemoryStore = require('memorystore')(session);
+const RedisStore = require('connect-redis').default;
 const {
+  setupOpenId,
   googleLogin,
   githubLogin,
   discordLogin,
   facebookLogin,
-  setupOpenId,
-} = require('../strategies');
-const client = require('../cache/redis');
+} = require('~/strategies');
+const { isEnabled } = require('~/server/utils');
+const { logger } = require('~/config');
 
 /**
  *
@@ -39,8 +42,17 @@ const configureSocialLogins = (app) => {
       resave: false,
       saveUninitialized: false,
     };
-    if (process.env.USE_REDIS) {
+    if (isEnabled(process.env.USE_REDIS)) {
+      const client = new Redis(process.env.REDIS_URI);
+      client
+        .on('error', (err) => logger.error('ioredis error:', err))
+        .on('ready', () => logger.info('ioredis successfully initialized.'))
+        .on('reconnecting', () => logger.info('ioredis reconnecting...'));
       sessionOptions.store = new RedisStore({ client, prefix: 'librechat' });
+    } else {
+      sessionOptions.store = new MemoryStore({
+        checkPeriod: 86400000, // prune expired entries every 24h
+      });
     }
     app.use(session(sessionOptions));
     app.use(passport.session());

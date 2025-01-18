@@ -1,7 +1,7 @@
 const { Constants } = require('librechat-data-provider');
 const { initializeFakeClient } = require('./FakeClient');
 
-jest.mock('../../../lib/db/connectDb');
+jest.mock('~/lib/db/connectDb');
 jest.mock('~/models', () => ({
   User: jest.fn(),
   Key: jest.fn(),
@@ -30,7 +30,7 @@ jest.mock('~/models', () => ({
   updateFileUsage: jest.fn(),
 }));
 
-jest.mock('langchain/chat_models/openai', () => {
+jest.mock('@langchain/openai', () => {
   return {
     ChatOpenAI: jest.fn().mockImplementation(() => {
       return {};
@@ -61,7 +61,7 @@ describe('BaseClient', () => {
   const options = {
     // debug: true,
     modelOptions: {
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o-mini',
       temperature: 0,
     },
   };
@@ -565,18 +565,24 @@ describe('BaseClient', () => {
       const getReqData = jest.fn();
       const opts = { getReqData };
       const response = await TestClient.sendMessage('Hello, world!', opts);
-      expect(getReqData).toHaveBeenCalledWith({
-        userMessage: expect.objectContaining({ text: 'Hello, world!' }),
-        conversationId: response.conversationId,
-        responseMessageId: response.messageId,
-      });
+      expect(getReqData).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userMessage: expect.objectContaining({ text: 'Hello, world!' }),
+          conversationId: response.conversationId,
+          responseMessageId: response.messageId,
+        }),
+      );
     });
 
     test('onStart is called with the correct arguments', async () => {
       const onStart = jest.fn();
       const opts = { onStart };
       await TestClient.sendMessage('Hello, world!', opts);
-      expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ text: 'Hello, world!' }));
+
+      expect(onStart).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'Hello, world!' }),
+        expect.any(String),
+      );
     });
 
     test('saveMessageToDatabase is called with the correct arguments', async () => {
@@ -609,9 +615,9 @@ describe('BaseClient', () => {
     test('getTokenCount for response is called with the correct arguments', async () => {
       const tokenCountMap = {}; // Mock tokenCountMap
       TestClient.buildMessages.mockReturnValue({ prompt: [], tokenCountMap });
-      TestClient.getTokenCount = jest.fn();
+      TestClient.getTokenCountForResponse = jest.fn();
       const response = await TestClient.sendMessage('Hello, world!', {});
-      expect(TestClient.getTokenCount).toHaveBeenCalledWith(response.text);
+      expect(TestClient.getTokenCountForResponse).toHaveBeenCalledWith(response);
     });
 
     test('returns an object with the correct shape', async () => {
@@ -626,6 +632,33 @@ describe('BaseClient', () => {
           conversationId: expect.any(String),
         }),
       );
+    });
+
+    test('userMessagePromise is awaited before saving response message', async () => {
+      // Mock the saveMessageToDatabase method
+      TestClient.saveMessageToDatabase = jest.fn().mockImplementation(() => {
+        return new Promise((resolve) => setTimeout(resolve, 100)); // Simulate a delay
+      });
+
+      // Send a message
+      const messagePromise = TestClient.sendMessage('Hello, world!');
+
+      // Wait a short time to ensure the user message save has started
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Check that saveMessageToDatabase has been called once (for the user message)
+      expect(TestClient.saveMessageToDatabase).toHaveBeenCalledTimes(1);
+
+      // Wait for the message to be fully processed
+      await messagePromise;
+
+      // Check that saveMessageToDatabase has been called twice (once for user message, once for response)
+      expect(TestClient.saveMessageToDatabase).toHaveBeenCalledTimes(2);
+
+      // Check the order of calls
+      const calls = TestClient.saveMessageToDatabase.mock.calls;
+      expect(calls[0][0].isCreatedByUser).toBe(true); // First call should be for user message
+      expect(calls[1][0].isCreatedByUser).toBe(false); // Second call should be for response message
     });
   });
 });
